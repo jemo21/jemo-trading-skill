@@ -8,6 +8,9 @@ Checks orders against Indian regulatory and account risk limits:
   4. Max Trades: Does not exceed max_trades_per_day (default 3).
   5. Square-Off Rule: Blocks new intraday entries after 15:00 IST.
   6. Lot Multiples: Ensures quantity is an exact multiple of the index lot.
+  7. Halal: blocks banks, lenders, insurers, alcohol and gambling companies,
+     indices, futures and options, and short sales (halal.py). Switch it off
+     with "halal": {"enabled": false} in config_indian.json.
 
 A swing (delivery) basket is bought on one day, so it has its own day limits:
 swing_max_daily_loss_inr and swing_max_trades_per_day. They apply only with
@@ -26,6 +29,7 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 from market_calendar_indian import to_ist, is_market_open, SQUARE_OFF_TIME
 from indian_instruments import lot_size_for, underlying_of
+import halal
 
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), "..", "config_indian.json")
 
@@ -101,6 +105,16 @@ def check_order_risk(symbol, qty, entry, stop, realized_loss_today=0, trades_tod
         reasons.append(f"TRADE_LOSS_LIMIT: Potential loss ₹{total_trade_risk:.2f} exceeds cap of ₹{max_trade_loss}")
         passed = False
 
+    # Halal: only shares of permitted companies, bought outright.
+    rules = halal.load_settings()
+    ok, why = halal.screen(symbol, settings=rules)
+    if not ok:
+        reasons.append(f"HALAL: {why}")
+        passed = False
+    if side == "sell" and rules["enabled"]:
+        reasons.append(halal.short_sale_reason(rules))
+        passed = False
+
     # Check Lot multiples for Indices
     idx = underlying_of(symbol)
     if idx:
@@ -119,7 +133,7 @@ def check_order_risk(symbol, qty, entry, stop, realized_loss_today=0, trades_tod
 
 def main():
     parser = argparse.ArgumentParser(description="Indian Market Risk Gatekeeper")
-    parser.add_argument("--symbol", default="NIFTY", help="Trading Symbol")
+    parser.add_argument("--symbol", required=True, help="Trading symbol (a halal NSE stock, e.g. TCS)")
     parser.add_argument("--qty", type=int, required=True, help="Order quantity")
     parser.add_argument("--entry", type=float, required=True, help="Entry price (₹)")
     parser.add_argument("--stop", type=float, required=True, help="Stop loss price (₹)")

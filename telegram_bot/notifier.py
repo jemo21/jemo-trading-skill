@@ -92,11 +92,8 @@ def send_orb_signal(index_name, spot_price, range_high, range_low, strike_opt, p
     return send_telegram_message(msg)
 
 def send_orb_alert(index_name, side, bar_time, spot, range_high, range_low, stop, target):
-    """Dispatches an opening-range break alert with index (spot) levels only.
-
-    It names no option contract and no premium: those have to come from a live
-    option quote, and this alert has none.
-    """
+    """Dispatches an opening-range break alert for a halal stock (or, with the
+    halal screen off, an index) with price levels only."""
     arrow = "🟢 BREAKOUT (up)" if side == "long" else "🔴 BREAKDOWN (down)"
     msg = (
         f"🚨 <b>OPENING RANGE {arrow}: {index_name}</b>\n"
@@ -106,7 +103,7 @@ def send_orb_alert(index_name, side, bar_time, spot, range_high, range_low, stop
         f"🛑 <b>Index stop (range midpoint):</b> {stop:,.2f}\n"
         f"🎯 <b>Index target:</b> {target:,.2f}\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
-        "Levels are for the index, from a feed that can lag. Check the live price, "
+        "Levels come from a feed that can lag. Check the live price, "
         "size the trade and pass the risk check before any order.\n"
         "<i>⚠️ An alert, not advice. Square off by 15:15 IST.</i>"
     )
@@ -118,7 +115,7 @@ def send_squareoff_reminder():
         "⏰ <b>INTRADAY SQUARE-OFF REMINDER (15:10 IST)</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "Market closes in 20 minutes (15:30 IST).\n"
-        "Please ensure all intraday MIS/Option positions are closed to avoid auto-square-off penalty charges from the broker."
+        "Please ensure all intraday positions are closed to avoid auto-square-off penalty charges from the broker."
     )
     return send_telegram_message(msg)
 

@@ -1,6 +1,6 @@
 ---
 name: trader-swing
-description: Swing Stock Picker for India. Finds NSE stocks to buy and hold for days to a few weeks (delivery), and shows the evidence behind every suggestion. Screens the roughly 200 liquid NSE stocks that have futures, replays each rule over three to four years of daily prices after costs, grades each rule SUPPORTED, MODEST, UNPROVEN or FAILED, and only recommends candidates from rules that held up. Gives a basket of about ten stocks to buy at the open, an emergency stop, a position size inside the user's limits and a sell-by date about a month out, then checks news and results dates before giving advice. Never places an order. Use when the user says "which stocks should I buy", "find stocks for the next few days", "stocks for the next few weeks", "swing trade ideas", "best stocks to invest in now", "momentum stocks", "run the swing screen", "what should I buy this week", or "/trader-swing".
+description: Swing Stock Picker for India. Finds NSE stocks to buy and hold for days to a few weeks (delivery), and shows the evidence behind every suggestion. Halal stocks only: screens the roughly 160 liquid NSE stocks that have futures and are not banks, lenders, insurers, alcohol or gambling companies, replays each rule over three to four years of daily prices after costs, grades each rule SUPPORTED, MODEST, UNPROVEN or FAILED, and only recommends candidates from rules that held up. Gives a basket of about ten stocks to buy at the open, an emergency stop, a position size inside the user's limits and a sell-by date about a month out, then checks news and results dates before giving advice. Never places an order. Use when the user says "which stocks should I buy", "find stocks for the next few days", "stocks for the next few weeks", "swing trade ideas", "best stocks to invest in now", "momentum stocks", "run the swing screen", "what should I buy this week", or "/trader-swing".
 ---
 
 # Swing Stock Picker (NSE)
@@ -11,6 +11,15 @@ be exact about how strong the evidence is. You never promise a profit and you ne
 order.
 
 All commands run from the project root.
+
+## Halal stocks only
+
+The screen keeps only halal companies (`halal.py` at the repo root): no riba (banks, lenders,
+insurers, brokers, exchanges), no alcohol, no gambling, and never an index, a future, an option
+or a short sale. Never suggest a stock that `python halal.py check SYMBOL` reports as NOT HALAL,
+even if the user names it; say why instead. The screen checks the business, not the financial
+ratios (debt, interest income), so tell the user to confirm a stock against a Shariah index list
+such as NIFTY500 Shariah before buying.
 
 ## What this is built on (read before advising)
 

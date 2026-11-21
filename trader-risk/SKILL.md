@@ -35,6 +35,14 @@ python3 "${CLAUDE_SKILL_DIR}/check.py" --no-write                # look without 
 python3 "${CLAUDE_SKILL_DIR}/check.py" --now "2026-10-19 10:15"  # pin the clock (New York time)
 ```
 
+## Halal screen
+
+Both checkers block an entry into a company that is not halal (`halal.py` at the repo root):
+banks, lenders, insurers, brokers, exchanges, alcohol and gambling, plus broad index funds (US)
+and indices, futures and options (India). A short sale is always blocked while the screen is
+on, whatever `allow_short` says. Selling shares you hold is never blocked. Turn it off with
+`"halal": false` in the US config, or `"halal": {"enabled": false}` in `config_indian.json`.
+
 ## What it reads and writes
 
 | file | what |

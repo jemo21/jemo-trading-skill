@@ -2,7 +2,9 @@
 """Swing-trade screener for NSE stocks, with the evidence behind every setup.
 
 Looks for stocks to BUY and hold for days to a few weeks (delivery / CNC),
-across the liquid NSE stocks that have futures listed (about 200 names).
+across the liquid NSE stocks that have futures listed (about 200 names),
+keeping only halal companies: no banks, lenders, insurers, alcohol or
+gambling (halal.py; financial ratios are not checked).
 
   python trader-scanner/swing_indian.py picks      today's candidates, ranked
   python trader-scanner/swing_indian.py backtest   how each setup did, after costs
@@ -51,6 +53,7 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 from backtest_indian import summarize
 from market_calendar_indian import is_trading_day, to_ist
+import halal
 
 STATE = os.path.join(ROOT, "trader", "state")
 DAILY_DIR = os.path.join(STATE, "daily")
@@ -110,8 +113,10 @@ def _instrument_rows():
         return list(csv.DictReader(fh))
 
 
-def build_universe(rows):
-    """NSE stocks that have futures listed: [{'symbol', 'token', 'name'}], sorted."""
+def build_universe(rows, halal_only=True):
+    """NSE stocks that have futures listed: [{'symbol', 'token', 'name'}], sorted.
+    With halal_only (the default) banks, lenders, insurers, alcohol and gambling
+    companies are left out (see halal.py)."""
     with_futures = {r["name"] for r in rows if r.get("segment") == "NFO-FUT"}
     stocks = {}
     for r in rows:
@@ -119,7 +124,10 @@ def build_universe(rows):
                 and r.get("tradingsymbol") in with_futures):
             stocks[r["tradingsymbol"]] = {"symbol": r["tradingsymbol"], "token": int(r["instrument_token"]),
                                           "name": r.get("name") or r["tradingsymbol"]}
-    return [stocks[s] for s in sorted(stocks)]
+    universe = [stocks[s] for s in sorted(stocks)]
+    if halal_only:
+        universe, _ = halal.filter_symbols(universe)
+    return universe
 
 
 def _cache_path(symbol):
@@ -781,6 +789,7 @@ def print_backtest(report, cost_pct, n_stocks, source):
         print("  By year (avg % per trade): " + ", ".join(
             f"{y} {v:+.2f}%" for y, v in s["by_year_avg_net_pct"].items()))
     print()
+    print("Halal stocks only: banks, lenders, insurers, alcohol and gambling are left out (halal.py).")
     print("The universe is today's F&O list, so stocks dropped from it in the past are missing,")
     print("which flatters every number a little. Several rules were tried before these were kept,")
     print("so some of any apparent edge is luck. Past results do not guarantee future ones.")

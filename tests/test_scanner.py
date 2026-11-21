@@ -70,8 +70,10 @@ class Universe(unittest.TestCase):
 
     def test_the_kept_list(self):
         self.assertEqual([s for s, _ in self.kept],
-                         ["A", "AACG", "AACI", "AAPL", "AME", "AMX", "ARLP", "BEP", "BF.B", "BRK.B", "IRS",
-                          "KO", "OBAI", "ORGO", "PFBC", "PRT", "TSLA"])
+                         ["A", "AACG", "AACI", "AAPL", "AME", "AMX", "ARLP", "BEP", "IRS",
+                          "KO", "OBAI", "ORGO", "PRT", "TSLA"])
+        # common stock, but not halal: Brown-Forman (whiskey), Berkshire (insurance), Preferred Bank
+        self.assertEqual(self.counts["not halal"], 3)
         self.assertEqual(self.counts["rows"], 36)
         self.assertEqual(self.created, "2026-10-19 10:01")
         self.assertEqual(dict(self.kept)["TSLA"], "Tesla, Inc. - Common Stock")
@@ -493,19 +495,21 @@ class Cli(unittest.TestCase):
         uni = os.path.join(self.t, "universe.txt")
         code, text, _ = run(["universe", "--offline", SYMDIR, "--out", uni])
         self.assertEqual(code, 0)
-        self.assertIn("Kept 17 US-listed", text)
+        self.assertIn("Kept 14 US-listed", text)
+        self.assertIn("3 not halal", text)
         with open(uni, encoding="utf-8") as fh:
             lines = fh.read().splitlines()
-        self.assertEqual(len(lines), 17)
-        self.assertIn("BRK.B|Berkshire Hathaway Inc. New Common Stock", lines)
+        self.assertEqual(len(lines), 14)
+        self.assertIn("KO|Coca-Cola Company (The) Common Stock", lines)
+        self.assertNotIn("BRK.B|Berkshire Hathaway Inc. New Common Stock", lines)
 
         # daily over that universe with the fixture charts: only KO and TSLA are in both, so partial
         code, text, _ = run(["daily", "--universe", uni, "--offline", DAILY, "--now", "2026-10-19 09:00",
                              "--out", self.wl, "--min-volume", "0"])
         self.assertEqual(code, 0)
-        self.assertIn("Fetched 2 of 17 charts (15 failed or had no data)", text)
+        self.assertIn("Fetched 2 of 14 charts (12 failed or had no data)", text)
         doc = self.read(self.wl)
-        self.assertEqual((doc["mode"], doc["universe"], doc["scanned"], doc["failed"]), ("daily", 17, 2, 15))
+        self.assertEqual((doc["mode"], doc["universe"], doc["scanned"], doc["failed"]), ("daily", 14, 2, 12))
         self.assertEqual(doc["hits"], [{"symbol": "KO", "setups": ["breakout_20d"], "price": 93.9,
                                         "close_date": "2026-10-16", "rsi": 75.3, "volume": 3680307}])
         self.assertEqual(doc["as_of"], "2026-10-16 close")

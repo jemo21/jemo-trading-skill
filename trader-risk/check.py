@@ -27,10 +27,14 @@ What blocks an order (every order):
   asset         options (OCC symbols) unless "allow_options": true; crypto
                 and anything that is not a stock or ETF
   short         selling more than you hold, unless "allow_short": true
+                (never while the halal screen is on)
 
 What blocks an entry (on top):
 
   blocked       a ticker on your "blocked" list
+  halal         a bank, lender, insurer, broker, exchange, alcohol or gambling
+                company, or a broad index fund (halal.py at the repo root;
+                "halal": false in your config turns it off)
   size          under min_order_usd, over max_order_usd
   position      the stock would be over max_position_pct of the account
   cash          the buy would dip into your cash buffer, or need margin
@@ -67,13 +71,16 @@ import os
 import re
 import sys
 
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+import halal
+
 DEFAULTS = {
     "budget": None, "cash_buffer_pct": 10, "max_position_pct": 75, "max_order_usd": 4000,
     "min_order_usd": 5, "max_loss_per_trade_usd": 50, "max_daily_loss_usd": 150, "max_trades_per_day": 3,
     "max_orders_per_day": 10, "min_reward_risk": 1.0, "require_stop": True,
     "no_entries_before": "09:45", "no_entries_after": "15:30", "flat_by": "15:55",
     "paper": True, "blocked": [], "allow_options": False, "allow_margin": False, "allow_short": False,
-    "pdt_guard": False,
+    "pdt_guard": False, "halal": True,
 }
 ALPACA_FIELDS = ("symbol", "side", "qty", "notional", "type", "time_in_force", "limit_price",
                  "stop_price", "trail_price", "trail_percent", "extended_hours", "client_order_id",
@@ -383,6 +390,7 @@ def check(orders, cfg, portfolio=None, prices=None, state=None, today=None, now=
     today = today or now_et.date().isoformat()
     acct, top_warn = account(c, portfolio, prices)
     blocked = {str(b).upper() for b in c.get("blocked") or []}
+    halal_rules = dict(halal.load_settings(), enabled=True)
     done_today = placed_today(state, today)
     count_today = len(done_today)
     entries_today = [r for r in done_today if rec_is_entry(r)]
@@ -530,6 +538,10 @@ def check(orders, cfg, portfolio=None, prices=None, state=None, today=None, now=
         # blocked list and size
         if sym in blocked:
             later.append("blocked: %s is on your blocked list" % sym)
+        if sym and c.get("halal", True):
+            ok, why = halal.screen(sym, market="US", settings=halal_rules)
+            if not ok:
+                later.append("halal: " + why)
         if value is not None:
             if value < float(c.get("min_order_usd") or 0) - CENT:
                 later.append("size: %s is under your %s minimum order"
@@ -563,7 +575,11 @@ def check(orders, cfg, portfolio=None, prices=None, state=None, today=None, now=
                 over = value > held_value + CENT
             else:
                 over = held <= 0
-            if over and not c.get("allow_short"):
+            if over and c.get("halal", True):
+                reasons.append("short: selling more %s than you hold (%s shares); %s. "
+                               "If you bought it, record the fill first (ticket.py fill)"
+                               % (sym, _num(held), halal.short_sale_reason({"enabled": True})))
+            elif over and not c.get("allow_short"):
                 reasons.append("short: selling more %s than you hold (%s shares); short selling is off. "
                                "If you bought it, record the fill first (ticket.py fill)" % (sym, _num(held)))
 

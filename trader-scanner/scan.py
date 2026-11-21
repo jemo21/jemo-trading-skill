@@ -24,6 +24,9 @@ universe  Downloads Nasdaq Trader's symbol directories (nasdaqlisted.txt and
                Global depositary shares, or partnership / trust units
             5. out: the name still says unit, right, bond, preferred or preference
             6. in: everything else (plain names like "AMETEK, Inc.")
+            7. out after all: anything that fails the halal screen (halal.py):
+               banks, lenders, insurers, brokers, exchanges, alcohol and
+               gambling companies, by ticker list and by name
 
 daily     Pre-market scan of daily CLOSES (Yahoo spark: 20 symbols a request,
           3 months of 1-day bars, closes only). Liquidity from the spark meta:
@@ -75,6 +78,9 @@ import json
 import os
 import re
 import sys
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+import halal
 import time
 import urllib.error
 import urllib.request
@@ -473,6 +479,9 @@ def build_universe(texts):
         counts["rows"] = counts.get("rows", 0) + len(rows)
         for r in rows:
             why = classify(r)
+            if why == "keep" and not halal.is_halal(r.get("Symbol") or r.get("ACT Symbol") or "",
+                                                    r.get("Security Name") or "", market="US"):
+                why = "not halal"
             counts[why] = counts.get(why, 0) + 1
             if why == "keep":
                 sym = (r.get("Symbol") or r.get("ACT Symbol")).strip()

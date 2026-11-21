@@ -19,8 +19,10 @@ TODAY = "2026-10-19"
 V1_TODAY = "2026-10-13"
 PRICES = {"AAPL": 341.27, "AXP": 309.84, "GOOGL": 353.78, "KO": 90.11, "BAC": 53.96}
 QUOTE_TIME = datetime.datetime(2026, 10, 19, 14, 52, 13)   # Yahoo's TSLA quote 366.475, 10:52:13 New York
-# v1's rules with every day-trade check switched off: the long-term checks still hold
-V1 = {"budget": 5000, "cash_buffer_pct": 10, "max_position_pct": 25, "max_order_usd": 2000, "min_order_usd": 5,
+# v1's rules with every day-trade check switched off: the long-term checks still hold.
+# The halal screen is off too, because the reel's orders buy two financials (BAC, AXP);
+# HalalScreen below checks that they are blocked when it is on.
+V1 = {"halal": False, "budget": 5000, "cash_buffer_pct": 10, "max_position_pct": 25, "max_order_usd": 2000, "min_order_usd": 5,
       "max_orders_per_day": 10, "require_stop": False, "no_entries_before": None, "no_entries_after": None,
       "max_trades_per_day": 0, "max_daily_loss_usd": 0, "max_loss_per_trade_usd": 0, "min_reward_risk": 0}
 
@@ -274,11 +276,15 @@ class DayTradeChecks(unittest.TestCase):
                  "plan": {"entry": 364.18}}
         res = self.one(short)
         self.assertIn("short: selling more TSLA than you hold", reasons(res))
-        res = self.one(short, allow_short=True)
+        # "allow_short" only counts with the halal screen off: a short sale is never halal
+        res = self.one(short, allow_short=True, halal=False)
         r = res["results"][0]
         self.assertEqual((r["verdict"], r["kind"], r["max_loss"], r["reward_risk"]), ("PASS", "entry", 46.88, 1.0))
-        res = self.one(dict(short, stop_loss_stop_price="360.00"), allow_short=True)
+        res = self.one(dict(short, stop_loss_stop_price="360.00"), allow_short=True, halal=False)
         self.assertIn("must be above the entry 364.18 for a sell", reasons(res))
+        res = self.one(short, allow_short=True, halal=True)
+        self.assertIn("short sale sells shares you do not own", reasons(res))
+        self.assertEqual(res["results"][0]["verdict"], "BLOCK")
 
     def test_bracket_format(self):
         self.assertIn("whole-share qty", reasons(self.one(dict(tsla(qty=None), notional="2900"))))
@@ -343,6 +349,27 @@ class Exits(unittest.TestCase):
         res = check.check([tsla(), self.SELL], cfg(), now=at(NOW))
         self.assertEqual(verdicts(res), ["PASS", "PASS"])
         self.assertEqual(res["results"][1]["kind"], "exit")
+
+
+class HalalScreen(unittest.TestCase):
+    def test_financials_alcohol_gambling_and_index_funds_are_blocked(self):
+        orders = [buy(sym, 100) for sym in ("AAPL", "BAC", "AXP", "BUD", "DKNG", "SPY", "KO")]
+        res = check.check(orders, v1(halal=True), prices=PRICES, today=V1_TODAY)
+        self.assertEqual(verdicts(res), ["PASS", "BLOCK", "BLOCK", "BLOCK", "BLOCK", "BLOCK", "PASS"])
+        self.assertIn("halal: BAC: not halal, riba", reasons(res, 1))
+        self.assertIn("alcohol", reasons(res, 3))
+        self.assertIn("gambling", reasons(res, 4))
+        self.assertIn("index", reasons(res, 5))
+
+    def test_on_by_default_and_never_blocks_an_exit(self):
+        res = check.check([buy("BAC", 100)], {k: v for k, v in V1.items() if k != "halal"},
+                          prices=PRICES, today=V1_TODAY)
+        self.assertEqual(verdicts(res), ["BLOCK"])
+        pf = {"cash": 1000, "positions": [{"ticker": "BAC", "shares": 5,
+                                            "lots": [{"date": V1_TODAY, "shares": 5, "cost": 250}]}]}
+        sell = {"symbol": "BAC", "side": "sell", "qty": "5", "type": "market", "time_in_force": "day"}
+        res = check.check([sell], v1(halal=True), portfolio=pf, prices=PRICES, today=V1_TODAY)
+        self.assertEqual(verdicts(res), ["PASS"])
 
 
 class V1Checks(unittest.TestCase):

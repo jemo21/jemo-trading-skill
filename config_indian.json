@@ -37,5 +37,11 @@
       "opt_exchange": "BFO"
     }
   },
-  "lot_sizes_as_of": "2026-11-12"
+  "lot_sizes_as_of": "2026-11-12",
+  "halal": {
+    "enabled": true,
+    "_note": "Halal screen (halal.py). exclude: extra NSE symbols to keep out. allow: a symbol wrongly flagged that you have checked yourself.",
+    "exclude": [],
+    "allow": []
+  }
 }

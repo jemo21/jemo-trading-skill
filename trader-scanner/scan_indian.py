@@ -2,7 +2,10 @@
 """Indian Market Breakout & Intraday Setup Scanner for trader-scanner. Standard library only.
 
 Replaces US Nasdaq/NYSE scanner with:
-  - NIFTY 50, BANK NIFTY, SENSEX & Top Indian F&O Stocks.
+  - Every halal NSE stock with futures, read from trader/universe.txt (build it
+    with universe_indian.py; about 160 stocks). Halal only (halal.py): no banks,
+    lenders, insurers, alcohol, gambling, and no indices. A non-halal symbol
+    passed in with --symbols is skipped. Without the file, a short built-in list.
   - Opening Range Breakout (ORB) on Indian market session (09:15 to 09:30 range).
   - 20-Day High Breakout, Reclaim 20-EMA, and RSI Oversold Bounces on NSE tickers (.NS).
 """
@@ -15,12 +18,29 @@ import os
 import sys
 import urllib.request
 
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+import halal
+
+UNIVERSE_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "trader", "universe.txt")
+
+# Used only when trader/universe.txt is missing or holds no NSE symbols.
 DEFAULT_SYMBOLS = [
-    "^NSEI", "^NSEBANK", "^BSESN",
-    "RELIANCE.NS", "HDFCBANK.NS", "ICICIBANK.NS", "INFY.NS", "TCS.NS",
-    "SBIN.NS", "BHARTIARTL.NS", "KOTAKBANK.NS", "LT.NS", "AXISBANK.NS",
-    "TATAMOTORS.NS", "BAJFINANCE.NS", "MARUTI.NS", "SUNPHARMA.NS"
+    "RELIANCE.NS", "INFY.NS", "TCS.NS", "HCLTECH.NS", "WIPRO.NS",
+    "BHARTIARTL.NS", "LT.NS", "TATAMOTORS.NS", "MARUTI.NS", "SUNPHARMA.NS",
+    "HINDUNILVR.NS", "ASIANPAINT.NS", "TITAN.NS", "NTPC.NS", "POWERGRID.NS",
 ]
+
+
+def load_universe(path=UNIVERSE_PATH):
+    """NSE/BSE symbols from a SYMBOL|Name file. US symbols (written there by the
+    US scanner, scan.py universe) are ignored. Falls back to DEFAULT_SYMBOLS."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            symbols = [ln.split("|", 1)[0].strip() for ln in fh if ln.strip()]
+    except OSError:
+        return list(DEFAULT_SYMBOLS)
+    symbols = [s for s in symbols if s.upper().endswith((".NS", ".BO"))]
+    return symbols or list(DEFAULT_SYMBOLS)
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -73,11 +93,16 @@ def scan_setups(symbols):
 
 def main():
     parser = argparse.ArgumentParser(description="Indian Market Setup Scanner")
-    parser.add_argument("--symbols", nargs="+", default=DEFAULT_SYMBOLS, help="List of Indian symbols to scan")
+    parser.add_argument("--symbols", nargs="+",
+                        help="Indian symbols to scan (default: every stock in trader/universe.txt)")
+    parser.add_argument("--universe", default=UNIVERSE_PATH, help="SYMBOL|Name file to scan (default: %(default)s)")
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     args = parser.parse_args()
 
-    results = scan_setups(args.symbols)
+    symbols, dropped = halal.filter_symbols(args.symbols or load_universe(args.universe))
+    for _, why in dropped:
+        print(f"Skipped {why}", file=sys.stderr)
+    results = scan_setups(symbols)
 
     if args.json:
         print(json.dumps(results, indent=2))

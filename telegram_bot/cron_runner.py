@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Autonomous Indian Market Trading Bot Runner.
-Checks market calendar, evaluates breakouts on NIFTY & BANK NIFTY,
-and sends instant signals via Telegram.
+Checks market calendar, evaluates opening-range breakouts on a few halal NSE
+stocks (long only: no index, no options, no short sales; see halal.py),
+and sends instant signals via Telegram. The morning bell still reports the
+index levels, as information only.
 """
 
 import datetime
@@ -19,6 +21,7 @@ from market_calendar_indian import to_ist, is_market_open
 from telegram_bot.notifier import send_morning_bell_alert, send_orb_alert, send_squareoff_reminder
 from kite import KiteError, _load_kite
 from entry_indian import evaluate_orb_entry
+import halal
 
 INDICES = {
     "NIFTY": "NSE:NIFTY 50",
@@ -26,8 +29,10 @@ INDICES = {
     "SENSEX": "BSE:SENSEX",
 }
 
-# Indices watched for an opening-range break, with their Yahoo chart symbols.
-ORB_SYMBOLS = {"NIFTY": "^NSEI", "BANKNIFTY": "^NSEBANK"}
+# Halal stocks watched for an opening-range break, with their Yahoo chart symbols.
+# Anything that fails the halal screen is skipped, even if it is added here.
+ORB_SYMBOLS = {"RELIANCE": "RELIANCE.NS", "TCS": "TCS.NS", "INFY": "INFY.NS"}
+ORB_DIRECTION = "long"  # buying only: a short sale sells shares you do not own
 # A break is only worth an alert while it is fresh. The schedule runs every
 # 15 minutes and GitHub often starts a run late, so allow a little more.
 FRESH_MINUTES = 20
@@ -55,9 +60,17 @@ def orb_alert_plan(result, now_ist):
 
 def check_breakouts(now_ist):
     sent = 0
+    rules = halal.load_settings()
     for name, symbol in ORB_SYMBOLS.items():
-        result = evaluate_orb_entry(symbol, "both", now_ist=now_ist)
+        ok, why = halal.screen(symbol, settings=rules)
+        if not ok:
+            print(f"{name}: skipped, {why}")
+            continue
+        result = evaluate_orb_entry(symbol, ORB_DIRECTION if rules["enabled"] else "both", now_ist=now_ist)
         plan = orb_alert_plan(result, now_ist)
+        if plan is not None and plan["side"] != "long" and rules["enabled"]:
+            print(f"{name}: breakdown ignored, {halal.short_sale_reason(rules)}")
+            continue
         if plan is None:
             print(f"{name}: {result.get('status')} - {result.get('reason')}")
             continue

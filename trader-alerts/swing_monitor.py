@@ -42,6 +42,7 @@ sys.path.insert(0, os.path.join(ROOT, "trader-scanner"))
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 import swing_indian as swing
+import halal
 from market_calendar_indian import holiday_name, is_trading_day, to_ist
 
 PICKS_PATH = os.path.join(ROOT, "trader", "swing_picks.json")
@@ -73,7 +74,8 @@ def _write_json(path, data):
 def build_watch(picks_doc, top, until=None):
     """Watch list from a swing_picks.json document: the first `top` usable momentum picks."""
     chosen = [p for p in picks_doc.get("picks", [])
-              if p.get("setup") == "momentum" and p.get("grade") in swing.USABLE_GRADES and p.get("qty", 0) > 0]
+              if p.get("setup") == "momentum" and p.get("grade") in swing.USABLE_GRADES and p.get("qty", 0) > 0
+              and halal.is_halal(p["symbol"], p.get("name", ""))]
     positions = [{"symbol": p["symbol"], "name": p["name"], "momentum_place": p.get("momentum_place"),
                   "planned_qty": p["qty"], "close_at_signal": p["close"], "max_entry": p.get("max_entry"),
                   "stop": p["stop"], "actual_entry": None, "actual_qty": None} for p in chosen[:top]]
@@ -457,6 +459,12 @@ def cmd_run(args):
         if today > watch.get("monitor_until", watch["sell_date"]):
             print("Monitoring ended on %s. Nothing sent." % watch.get("monitor_until", watch["sell_date"]))
             return 0
+
+    for position in watch.get("positions", []):
+        ok, why = halal.screen(position.get("symbol", ""), position.get("name", ""))
+        if not ok:
+            print("Warning: %s. Still monitored so you can exit it; it will not be picked again." % why,
+                  file=sys.stderr)
 
     rank_doc = _read_json(RANK_PATH, {}) or {}
     if args.rank or (now.strftime("%H:%M") >= RANK_AFTER and rank_doc.get("refreshed") != today and not args.no_rank):

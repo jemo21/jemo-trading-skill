@@ -42,6 +42,13 @@ to read saved Yahoo files, `--no-write`, `--show N`, `--json`. Exit code 0
 when the scan found something, 1 when it found nothing or could not run (the
 reason is one plain line).
 
+## Halal screen
+
+Every universe here is halal only (`halal.py` at the repo root). `scan.py universe` drops banks,
+lenders, insurers, brokers, exchanges, alcohol and gambling companies (counted as "not halal"),
+`universe_indian.py` and `swing_indian.py` do the same for NSE, and `scan_indian.py` skips a
+non-halal symbol or an index you pass it.
+
 ## What it reads and writes
 
 | file | what |

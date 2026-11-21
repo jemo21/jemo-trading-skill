@@ -14,6 +14,7 @@ check = load("trader-risk", "check_indian")
 entry = load("trader-entry", "entry_indian")
 backtest = load("trader-timemachine", "backtest_indian")
 cron_runner = load("telegram_bot", "cron_runner")
+import halal  # noqa: E402  (on the path once check_indian is loaded)
 
 OPEN_DAY = datetime.datetime(2026, 11, 12, 10, 30)  # a Thursday, mid-session IST
 
@@ -119,8 +120,18 @@ class RiskCheck(unittest.TestCase):
             return check.check_order_risk(**kwargs)
 
     def test_a_good_order_passes(self):
-        result = self.run_check(symbol="NIFTY26N1725300CE", qty=65, entry=125, stop=100)
+        result = self.run_check(symbol="TCS", qty=65, entry=125, stop=100)
         self.assertEqual(result["status"], "PASS", result["reasons"])
+
+    def test_halal_blocks_banks_alcohol_gambling_indices_options_and_shorts(self):
+        for symbol in ("HDFCBANK", "BAJFINANCE", "SBILIFE", "UBL", "DELTACORP", "NIFTY", "BANKNIFTY",
+                       "NIFTY26N1725300CE", "RELIANCE26NOVFUT"):
+            result = self.run_check(symbol=symbol, qty=65, entry=125, stop=100)
+            self.assertEqual(result["status"], "BLOCK", symbol)
+            self.assertTrue(any(r.startswith("HALAL:") for r in result["reasons"]), (symbol, result["reasons"]))
+        short = self.run_check(symbol="INFY", qty=10, entry=1500, stop=1510, side="sell")
+        self.assertEqual(short["status"], "BLOCK")
+        self.assertTrue(any(r.startswith("SHORT:") for r in short["reasons"]), short["reasons"])
 
     def test_stop_on_the_wrong_side_blocks(self):
         result = self.run_check(symbol="NIFTY", qty=65, entry=125, stop=130)
@@ -151,9 +162,12 @@ class RiskCheck(unittest.TestCase):
         self.assertTrue(any(r.startswith("TRADES_LIMIT") for r in full["reasons"]))
 
     def test_banknifty_uses_its_own_lot(self):
-        ok = self.run_check(symbol="BANKNIFTY", qty=30, entry=125, stop=100)
+        # only reachable with the halal screen switched off: an index is never halal
+        off = {"enabled": False, "exclude": set(), "allow": set()}
+        with mock.patch.object(check.halal, "load_settings", return_value=off):
+            ok = self.run_check(symbol="BANKNIFTY", qty=30, entry=125, stop=100)
+            bad = self.run_check(symbol="BANKNIFTY", qty=65, entry=125, stop=120)
         self.assertEqual(ok["status"], "PASS", ok["reasons"])
-        bad = self.run_check(symbol="BANKNIFTY", qty=65, entry=125, stop=120)
         self.assertTrue(any("BANKNIFTY lot size (30)" in r for r in bad["reasons"]))
 
 
@@ -276,13 +290,24 @@ class TelegramAlert(unittest.TestCase):
         self.assertIsNone(cron_runner.orb_alert_plan({"status": "WAITING"}, OPEN_DAY))
 
     def test_one_alert_per_fresh_break(self):
-        results = {"^NSEI": self.RESULT, "^NSEBANK": {"status": "WAITING", "reason": "inside range"}}
-        with mock.patch.object(cron_runner, "evaluate_orb_entry",
-                               side_effect=lambda symbol, direction, now_ist: results[symbol]), \
+        long = dict(self.RESULT, side="long", trigger_price=112.0)
+        results = {"RELIANCE.NS": long, "TCS.NS": {"status": "WAITING", "reason": "inside range"},
+                   "INFY.NS": self.RESULT}
+        directions = []
+
+        def evaluate(symbol, direction, now_ist):
+            directions.append(direction)
+            return results[symbol]
+        with mock.patch.object(cron_runner, "evaluate_orb_entry", side_effect=evaluate), \
                 mock.patch.object(cron_runner, "send_orb_alert", return_value=True) as send:
             self.assertEqual(cron_runner.check_breakouts(datetime.datetime(2026, 11, 12, 10, 10)), 1)
-        send.assert_called_once()
-        self.assertEqual(send.call_args[0][0], "NIFTY")
+        send.assert_called_once()  # INFY's breakdown would be a short sale: no alert
+        self.assertEqual(send.call_args[0][0], "RELIANCE")
+        self.assertEqual(set(directions), {"long"})
+
+    def test_only_halal_stocks_are_watched(self):
+        for name, symbol in cron_runner.ORB_SYMBOLS.items():
+            self.assertTrue(halal.is_halal(symbol), name)
 
 
 if __name__ == "__main__":
